@@ -18,6 +18,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boardIssue, buildRadar, dataScript, parseSnapshot } from './lib/model.ts';
+import { validateBoard } from './lib/validate.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -49,6 +50,20 @@ const issue = boardIssue(board, snapshot);
 if (issue !== null) {
   process.stderr.write(`token radar: the model wrote a board the gate refuses: ${issue}\n`);
   process.exit(1);
+}
+
+// The board is checked against the radar summary before a byte is written: a
+// board that fails here never reaches /output, so a bad run cannot ship
+// half an entry. Validation only reads the board; it changes no value.
+const problems = validateBoard(board, {
+  board_size: radar.board_size,
+  watchlist_size: radar.watchlist_size,
+  watchlist_slugs: radar.watchlist_slugs,
+  model_version: radar.model_version,
+  rows_count: radar.rows.length,
+});
+if (problems.length > 0) {
+  throw new Error(`token radar: the board fails validation:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 }
 
 mkdirSync(out, { recursive: true });
